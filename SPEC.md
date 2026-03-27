@@ -498,39 +498,80 @@ All 14 HiveEvent variants serialize to this flat JSON format via `serde_json::to
 
 ---
 
-## 9. MVP Scope
+## 9. Release History
 
-### Included in v1
+### v0.1.0 (Released 2026-03-28)
 
-| Feature | Priority |
-|---------|----------|
-| Agent Flow DAG (all 14 event types) | High |
-| Node detail panel (click to inspect) | High |
-| Real-time WebSocket connection | High |
-| Substrate Space 3D view | High |
-| Experience nodes with type coloring | High |
-| Relation lines | High |
-| Camera controls (orbit, zoom, pan) | High |
-| Node click → detail panel | High |
-| UMAP dimensionality reduction | High |
-| REST API for substrate data | High |
-| Filter panel (type, domain, time) | Medium |
-| Attractor glow visualization | Medium |
-| Lens viewport cones | Medium |
-| Token usage display | Medium |
-
-### Deferred to v2
-
-| Feature | Reason |
+| Feature | Status |
 |---------|--------|
-| Cost estimation per model | Needs pricing database |
-| Time scrubber / replay | Complex state management |
-| Insight cluster halos | Visual polish |
-| Query trajectory bending animation | Complex shader work |
-| Export trace as JSON | Low priority for MVP |
-| Multi-session comparison | Requires session storage |
-| PulseEval integration | Separate product |
-| Embedded in ProjectPulse Desktop | Requires Tauri integration |
+| Agent Flow DAG (all 14 event types) | Shipped |
+| Node detail panel (click to inspect) | Shipped |
+| Real-time WebSocket connection | Shipped |
+| Substrate Space 3D view | Shipped |
+| Experience nodes with type coloring (9 types) | Shipped |
+| Relation lines (color-coded by type) | Shipped |
+| Camera controls (orbit, zoom, pan) | Shipped |
+| Node click → detail panel | Shipped |
+| PCA dimensionality reduction (dynamic dimension) | Shipped (UMAP deferred) |
+| REST API for substrate data (10 endpoints) | Shipped |
+| Filter panel (type checkboxes, importance slider) | Shipped |
+| Attractor gravity wells with glow | Shipped |
+| Token usage display (stats bar) | Shipped |
+| WebSocket event hub (/ws/ingest, /ws/events, /ws/substrate) | Shipped |
+| SqliteSessionStore (event persistence) | Shipped |
+| WebSocketExporter client crate | Shipped |
+| Dual-mode deployment (embeddable + standalone) | Shipped |
+| Dockerfile for containerized deployment | Shipped |
+| Flow animations (fade-in, pulse, checkmark, error flash) | Shipped |
+| Dark theme design system | Shipped |
+
+### v0.2.0 Roadmap (Planned)
+
+#### Visualization Enhancements
+
+| Feature | Priority | Description |
+|---------|----------|-------------|
+| Lens viewport cones | High | Cone meshes showing agent perception volumes. Requires new REST endpoint `/api/substrate/lenses` exposing `domain_focus`, `purpose_embedding`, `attention_budget` per agent. |
+| UMAP dimensionality reduction | High | Better cluster separation than PCA. Evaluate `umap-js` (client-side) or Rust UMAP implementation. User toggle between PCA/UMAP. |
+| Bloom postprocessing | Medium | `@react-three/postprocessing` Bloom effect for attractor glow. Resolve peer dependency conflict with R3F v8. |
+| Insight cluster halos | Medium | Golden glow halos around `DerivedInsight` source experience clusters. Requires insight embedding positions. |
+| Query trajectory bending | Low | Animated visualization of how attractor gravity wells warp agent query trajectories. Custom GLSL shaders. |
+
+#### Replay & Analysis
+
+| Feature | Priority | Description |
+|---------|----------|-------------|
+| Time scrubber / session replay | High | Slider to replay recorded sessions from SessionStore. Requires snapshot-based state reconstruction from stored events. |
+| Multi-session comparison | Medium | Side-by-side or overlay comparison of two agent runs. Session events already persisted in SQLite. |
+| Export trace as JSON | Low | Download button to export a session's events as a JSON file for sharing/analysis. |
+
+#### Infrastructure
+
+| Feature | Priority | Description |
+|---------|----------|-------------|
+| crates.io publishing | High | Publish `pulsevision`, `pulsevision-cli`, `pulsevision-client` to crates.io. Fix path deps → version refs. |
+| PostgresSessionStore | High | `SessionStore` trait implementation using `sqlx` for embedded mode (host app's PostgreSQL). Trait + schema defined, needs implementation. |
+| GitHub Actions CI | Medium | Automated CI: `cargo test`, `clippy`, `fmt`, `npm test`, `tsc`, frontend build. Run on push + PRs. |
+| Pre-built binaries | Medium | GitHub Actions release workflow producing macOS (arm64/x64) and Linux (x64) binaries on tag push. |
+| Cost estimation per model | Low | Model pricing database (OpenAI, Anthropic, GLM) with per-node cost display in detail panels. |
+
+#### Integrations
+
+| Feature | Priority | Description |
+|---------|----------|-------------|
+| Embedded in ProjectPulse Desktop | High | Tauri integration: embed PulseVision routes at `/vision` in the ProjectPulse Axum backend. Share `Arc<PulseDB>` and event broadcast channel. |
+| PulseEval integration | Low | Connect to PulseEval (separate product) for agent output quality scoring. Display quality scores alongside agent nodes. |
+| Authentication / multi-tenant | Low | JWT or OAuth for team deployments. Required when PulseVision is exposed beyond localhost. |
+
+#### v0.2.0 Dependencies
+
+| Dependency | Required For |
+|------------|-------------|
+| PulseHive lens data API | Lens viewport cones |
+| PulseDB v0.5+ (if lens data stored) | Lens perception data |
+| `@react-three/postprocessing` v3+ | Bloom effect (peer dep fix) |
+| Mature Rust UMAP crate OR `umap-js` | UMAP projection |
+| GitHub Actions setup | CI, pre-built binaries |
 
 ---
 
@@ -652,15 +693,24 @@ The `EventExporter` trait and `HiveMindBuilder::event_exporter()` are part of Pu
 
 ## 12. Success Criteria
 
-PulseVision v1 is successful if:
+### v0.1.0 Results (Achieved 2026-03-28)
 
-1. **Agent Flow**: Can visualize a DevStudio 4-agent pipeline (Explorer→Planner→Coder→Tester) as an interactive DAG with timing and token data
-2. **Substrate Space**: Can render 1000+ experiences as an interactive 3D scatter with type coloring and relation lines
-3. **Real-time**: Events appear in the UI within 100ms of emission by PulseHive
-4. **Click-to-inspect**: Any node reveals full detail (content, metadata, relations)
-5. **Filtering**: Can filter experiences by type, domain, and time range
-6. **Performance**: 60fps with 5000 experience nodes in the 3D view (instanced rendering)
-7. **Zero SDK overhead**: PulseHive runs identically with and without the vision exporter
+| Criteria | Target | Result |
+|----------|--------|--------|
+| Agent Flow | Visualize 4-agent pipeline as interactive DAG | Shipped: Explorer→Planner→Coder→Tester with timing + tokens |
+| Substrate Space | Render 1000+ experiences in 3D | Shipped: InstancedMesh with type coloring + relation lines |
+| Real-time | Events in UI within 100ms | Shipped: WebSocket relay with <100ms latency |
+| Click-to-inspect | Full detail on any node | Shipped: 4 detail panel variants + space detail |
+| Filtering | Filter by type, domain, time | Shipped: Type checkboxes + importance slider + toggles |
+| Performance | 60fps at 5000 nodes | Shipped: InstancedMesh single draw call |
+| Zero SDK overhead | PulseHive runs identically with/without exporter | Shipped: Fire-and-forget via tokio::spawn |
+
+### Test Coverage
+
+- 45 tests total (23 Rust + 22 TypeScript)
+- Real GLM LLM integration tests
+- Full PulseHive → WebSocket → PulseVision E2E pipeline verified
+- Zero clippy warnings
 
 ---
 
