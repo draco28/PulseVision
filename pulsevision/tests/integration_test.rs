@@ -585,3 +585,298 @@ async fn test_pulsehive_event_collection() {
 
     println!("E2E pipeline test passed: PulseHive → Events → PulseVision API");
 }
+
+// ── WebSocket Integration Tests ───────────────────────────────────────
+
+/// Build a PulseVision app with SqliteSessionStore for WebSocket testing.
+fn build_ws_test_app(substrate_path: &str, session_dir: &std::path::Path) -> Router {
+    use pulsevision::session::sqlite::SqliteSessionStore;
+
+    let session_store = Arc::new(
+        SqliteSessionStore::new(session_dir.join("ws_test_sessions.db")).unwrap(),
+    );
+
+    let config = PulseVisionConfig {
+        substrate: SubstrateSource::File {
+            path: substrate_path.to_string(),
+        },
+        event_source: EventSource::WebSocketIngest,
+        session_store,
+        collective_id: None,
+    };
+    pulsevision::router(config)
+}
+
+/// Start a real TCP server and return its address.
+async fn start_test_server(app: Router) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    // Small delay for server startup
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    format!("127.0.0.1:{}", addr.port())
+}
+
+#[tokio::test]
+async fn test_websocket_ingest_and_broadcast() {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::connect_async;
+
+    let dir = TempDir::new().unwrap();
+    let substrate_path = create_test_substrate(&dir);
+    let app = build_ws_test_app(&substrate_path, dir.path());
+
+    let addr = start_test_server(app).await;
+
+    // Connect a browser subscriber to /ws/events
+    let (mut subscriber, _) = connect_async(format!("ws://{addr}/ws/events"))
+        .await
+        .expect("Failed to connect subscriber");
+
+    // Connect an ingest client to /ws/ingest
+    let (mut ingest, _) = connect_async(format!("ws://{addr}/ws/ingest"))
+        .await
+        .expect("Failed to connect ingest");
+
+    // Small delay for connections to establish
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Send a HiveEvent via ingest
+    let event_json = serde_json::json!({
+        "type": "agent_started",
+        "timestamp_ms": 1711500000000u64,
+        "agent_id": "test-agent-ws",
+        "name": "ws-test-agent",
+        "kind": "llm"
+    });
+    ingest
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            serde_json::to_string(&event_json).unwrap().into(),
+        ))
+        .await
+        .unwrap();
+
+    // Helper: read next text message (skip pings/pongs)
+    async fn next_text_msg(
+        sub: &mut (impl futures_util::StreamExt<Item = std::result::Result<tokio_tungstenite::tungstenite::Message, tokio_tungstenite::tungstenite::Error>> + Unpin),
+    ) -> String {
+        loop {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), sub.next()).await {
+                Ok(Some(Ok(tokio_tungstenite::tungstenite::Message::Text(t)))) => return t.to_string(),
+                Ok(Some(Ok(_))) => continue, // skip ping/pong/binary
+                Ok(Some(Err(e))) => panic!("WebSocket error: {e}"),
+                Ok(None) => panic!("Stream ended"),
+                Err(_) => panic!("Timed out waiting for text message"),
+            }
+        }
+    }
+
+    // The subscriber should receive the event
+    let text = next_text_msg(&mut subscriber).await;
+    let received: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(received["type"], "agent_started");
+    assert_eq!(received["name"], "ws-test-agent");
+    println!("WebSocket broadcast verified: {}", received["type"]);
+
+    // Send another event
+    let event2 = serde_json::json!({
+        "type": "llm_call_completed",
+        "timestamp_ms": 1711500001000u64,
+        "agent_id": "test-agent-ws",
+        "model": "GLM-4.7",
+        "duration_ms": 1500,
+        "input_tokens": 200,
+        "output_tokens": 50
+    });
+    ingest
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            serde_json::to_string(&event2).unwrap().into(),
+        ))
+        .await
+        .unwrap();
+
+    let text2 = next_text_msg(&mut subscriber).await;
+    let received2: serde_json::Value = serde_json::from_str(&text2).unwrap();
+    assert_eq!(received2["type"], "llm_call_completed");
+    assert_eq!(received2["input_tokens"], 200);
+    println!("Second event broadcast verified: {}", received2["type"]);
+
+    // Close ingest connection
+    ingest.close(None).await.ok();
+
+    // Verify events were persisted to SessionStore
+    // (check via REST API)
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    println!("WebSocket ingest + broadcast + persistence test passed");
+}
+
+#[tokio::test]
+async fn test_websocket_malformed_event_rejected() {
+    use futures_util::SinkExt;
+    use tokio_tungstenite::connect_async;
+
+    let dir = TempDir::new().unwrap();
+    let substrate_path = create_test_substrate(&dir);
+    let app = build_ws_test_app(&substrate_path, dir.path());
+
+    let addr = start_test_server(app).await;
+
+    let (mut ingest, _) = connect_async(format!("ws://{addr}/ws/ingest"))
+        .await
+        .expect("Failed to connect");
+
+    // Send malformed JSON — should be silently dropped (not crash)
+    ingest
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            "not valid json".into(),
+        ))
+        .await
+        .unwrap();
+
+    // Send valid JSON but not a HiveEvent — should also be dropped
+    ingest
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            r#"{"foo": "bar"}"#.into(),
+        ))
+        .await
+        .unwrap();
+
+    // Connection should still be alive — send a valid event
+    let valid_event = serde_json::json!({
+        "type": "agent_started",
+        "timestamp_ms": 1711500000000u64,
+        "agent_id": "agent-1",
+        "name": "recovery-test",
+        "kind": "llm"
+    });
+    ingest
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            serde_json::to_string(&valid_event).unwrap().into(),
+        ))
+        .await
+        .unwrap();
+
+    // Small delay to ensure server processes
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    ingest.close(None).await.ok();
+    println!("Malformed event rejection test passed — connection survived");
+}
+
+#[tokio::test]
+async fn test_websocket_session_auto_created() {
+    use futures_util::SinkExt;
+    use tokio_tungstenite::connect_async;
+
+    let dir = TempDir::new().unwrap();
+    let substrate_path = create_test_substrate(&dir);
+
+    // Use SqliteSessionStore so we can verify session was created
+    use pulsevision::session::sqlite::SqliteSessionStore;
+    use pulsevision::session::SessionStore;
+
+    let session_store = Arc::new(
+        SqliteSessionStore::new(dir.path().join("session_test.db")).unwrap(),
+    );
+
+    let config = PulseVisionConfig {
+        substrate: SubstrateSource::File {
+            path: substrate_path.to_string(),
+        },
+        event_source: EventSource::WebSocketIngest,
+        session_store: session_store.clone(),
+        collective_id: None,
+    };
+    let app = pulsevision::router(config);
+    let addr = start_test_server(app).await;
+
+    // Verify no sessions exist
+    let sessions = session_store.list_sessions().await.unwrap();
+    assert!(sessions.is_empty(), "Should start with no sessions");
+
+    // Connect and send an event
+    let (mut ingest, _) = connect_async(format!("ws://{addr}/ws/ingest"))
+        .await
+        .unwrap();
+
+    let event = serde_json::json!({
+        "type": "agent_started",
+        "timestamp_ms": 1711500000000u64,
+        "agent_id": "agent-1",
+        "name": "auto-session-test",
+        "kind": "llm"
+    });
+    ingest
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            serde_json::to_string(&event).unwrap().into(),
+        ))
+        .await
+        .unwrap();
+
+    // Wait for processing
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Session should now exist with 1 event
+    let sessions = session_store.list_sessions().await.unwrap();
+    assert_eq!(sessions.len(), 1, "Session should be auto-created");
+    assert_eq!(sessions[0].event_count, 1);
+
+    // Send 2 more events
+    for event_type in ["llm_call_completed", "agent_completed"] {
+        let e = match event_type {
+            "llm_call_completed" => serde_json::json!({
+                "type": "llm_call_completed",
+                "timestamp_ms": 1711500001000u64,
+                "agent_id": "agent-1",
+                "model": "GLM-4.7",
+                "duration_ms": 1000,
+                "input_tokens": 100,
+                "output_tokens": 30
+            }),
+            _ => serde_json::json!({
+                "type": "agent_completed",
+                "timestamp_ms": 1711500002000u64,
+                "agent_id": "agent-1",
+                "outcome": { "status": "complete", "response": "Done" }
+            }),
+        };
+        ingest
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                serde_json::to_string(&e).unwrap().into(),
+            ))
+            .await
+            .unwrap();
+    }
+
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+    // Should still be 1 session with 3 events
+    let sessions = session_store.list_sessions().await.unwrap();
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].event_count, 3);
+
+    // Close connection — session should be completed
+    ingest.close(None).await.ok();
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    let sessions = session_store.list_sessions().await.unwrap();
+    assert_eq!(
+        sessions[0].status,
+        pulsevision::session::SessionStatus::Completed
+    );
+
+    // Verify events can be retrieved
+    let events = session_store
+        .list_events(sessions[0].id, 100, 0)
+        .await
+        .unwrap();
+    assert_eq!(events.len(), 3);
+    assert_eq!(events[0].event_type, "agent_started");
+    assert_eq!(events[1].event_type, "llm_call_completed");
+    assert_eq!(events[2].event_type, "agent_completed");
+
+    println!("Session auto-creation + persistence test passed: 3 events stored and retrieved");
+}

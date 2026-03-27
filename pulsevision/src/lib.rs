@@ -33,6 +33,7 @@ pub fn router(config: PulseVisionConfig) -> Router {
 
     Router::new()
         .merge(api::router())
+        .merge(ws::router())
         .route("/api/health", get(health))
         .with_state(state)
 }

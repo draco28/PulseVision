@@ -41,8 +41,13 @@ async fn main() -> anyhow::Result<()> {
         "Starting PulseVision server"
     );
 
-    // TODO: SQLite session store (Sprint 2)
-    let session_store = Arc::new(pulsevision::session::NoopSessionStore);
+    // SQLite session store for event persistence
+    let session_db_path = format!("{}.sessions.db", cli.substrate);
+    let session_store = Arc::new(
+        pulsevision::session::sqlite::SqliteSessionStore::new(&session_db_path)
+            .expect("Failed to open session store"),
+    );
+    tracing::info!(session_db = %session_db_path, "Session store initialized");
 
     let config = PulseVisionConfig {
         substrate: SubstrateSource::File {
