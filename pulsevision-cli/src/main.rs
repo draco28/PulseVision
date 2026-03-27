@@ -1,10 +1,12 @@
 use clap::Parser;
 use pulsevision::config::{EventSource, PulseVisionConfig, SubstrateSource};
 use std::sync::Arc;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "pulsevision", about = "PulseVision observability server")]
+#[command(name = "pulsevision", about = "PulseVision — Real-time observability for PulseHive multi-agent systems")]
+#[command(version)]
 struct Cli {
     /// Path to PulseDB substrate file
     #[arg(long)]
@@ -18,7 +20,11 @@ struct Cli {
     #[arg(long, default_value = "127.0.0.1")]
     bind: String,
 
-    /// Log level
+    /// Directory containing frontend static files (index.html, assets/)
+    #[arg(long, default_value = "frontend/dist")]
+    static_dir: String,
+
+    /// Log level (error, warn, info, debug, trace)
     #[arg(long, default_value = "info")]
     log_level: String,
 }
@@ -38,6 +44,7 @@ async fn main() -> anyhow::Result<()> {
         substrate = %cli.substrate,
         port = cli.port,
         bind = %cli.bind,
+        static_dir = %cli.static_dir,
         "Starting PulseVision server"
     );
 
@@ -58,7 +65,19 @@ async fn main() -> anyhow::Result<()> {
         collective_id: None,
     };
 
-    let app = pulsevision::router(config);
+    let api_router = pulsevision::router(config);
+
+    // Serve frontend static files as fallback (SPA: all non-API routes → index.html)
+    let static_dir = cli.static_dir.clone();
+    let app = if std::path::Path::new(&static_dir).join("index.html").exists() {
+        tracing::info!(dir = %static_dir, "Serving frontend from static files");
+        let serve = ServeDir::new(&static_dir)
+            .not_found_service(ServeFile::new(format!("{}/index.html", static_dir)));
+        api_router.fallback_service(serve)
+    } else {
+        tracing::warn!(dir = %static_dir, "Static directory not found, serving API only");
+        api_router
+    };
 
     let addr = format!("{}:{}", cli.bind, cli.port);
     let listener = tokio::net::TcpListener::bind(&addr).await?;

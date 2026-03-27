@@ -9,6 +9,7 @@ import { RelationLines } from './RelationLines';
 import { AttractorFields } from './AttractorFields';
 import { HoverLabel } from './HoverLabel';
 import { SpaceDetailPanel } from './SpaceDetailPanel';
+import { FilterPanel } from './FilterPanel';
 
 // Error boundary to catch R3F/WebGL crashes without killing the whole app
 class CanvasErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
@@ -95,7 +96,7 @@ export function SpaceCanvas() {
         )}
       </div>
 
-      {selectedId && <SpaceDetailPanel />}
+      {selectedId ? <SpaceDetailPanel /> : <FilterPanel />}
     </div>
   );
 }
