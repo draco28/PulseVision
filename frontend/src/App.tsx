@@ -5,6 +5,7 @@ import { useUiStore } from './stores/uiStore';
 import { useEventStore } from './stores/eventStore';
 import { Toolbar } from './components/shared/Toolbar';
 import { FlowCanvas } from './components/flow/FlowCanvas';
+import { SpaceCanvas } from './components/space/SpaceCanvas';
 
 function StatsBar() {
   const totalTokens = useEventStore((s) => s.totalTokens);
@@ -60,20 +61,7 @@ export default function App() {
       <Toolbar />
       <div style={{ flex: 1, overflow: 'hidden' }}>
         {activeTab === 'flow' && <FlowCanvas />}
-        {activeTab === 'space' && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              color: 'var(--text-secondary)',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            Substrate Space (Sprint 4)
-          </div>
-        )}
+        {activeTab === 'space' && <SpaceCanvas />}
       </div>
       <StatsBar />
     </div>

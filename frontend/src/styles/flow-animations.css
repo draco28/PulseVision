@@ -1,0 +1,67 @@
+/* Agent Flow node animations */
+
+@keyframes nodeAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes agentPulse {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(88, 166, 255, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(88, 166, 255, 0.6);
+  }
+}
+
+@keyframes errorFlash {
+  0%, 100% {
+    background-color: var(--surface);
+  }
+  25%, 75% {
+    background-color: rgba(248, 81, 73, 0.2);
+  }
+}
+
+@keyframes checkmarkPop {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.flow-node {
+  animation: nodeAppear 300ms ease-out;
+}
+
+.flow-node--running {
+  animation: nodeAppear 300ms ease-out, agentPulse 1500ms ease-in-out infinite;
+}
+
+.flow-node--error {
+  animation: nodeAppear 300ms ease-out, errorFlash 500ms ease-in-out 2;
+}
+
+.flow-node__checkmark {
+  animation: checkmarkPop 200ms ease-out;
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-node,
+  .flow-node--running,
+  .flow-node--error,
+  .flow-node__checkmark {
+    animation: none !important;
+  }
+}

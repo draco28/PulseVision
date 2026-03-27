@@ -1,12 +1,14 @@
 import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { LlmCallNodeData } from '../../../stores/types';
+import '../../../styles/flow-animations.css';
 
 export const LlmCallNode = memo(function LlmCallNode({ data }: { data: Record<string, unknown> }) {
   const d = data as unknown as LlmCallNodeData;
 
   return (
     <div
+      className="flow-node"
       style={{
         background: 'var(--surface)',
         border: '2px solid var(--node-llm)',

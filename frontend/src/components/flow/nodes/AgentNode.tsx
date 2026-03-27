@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { AgentNodeData } from '../../../stores/types';
+import '../../../styles/flow-animations.css';
 
 const kindBadgeColors: Record<string, string> = {
   llm: 'var(--node-agent)',
@@ -14,8 +15,15 @@ export const AgentNode = memo(function AgentNode({ data }: { data: Record<string
   const borderColor = kindBadgeColors[d.kind] || 'var(--node-agent)';
   const isError = d.status === 'error';
 
+  const animClass = d.status === 'running'
+    ? 'flow-node--running'
+    : d.status === 'error'
+    ? 'flow-node--error'
+    : 'flow-node';
+
   return (
     <div
+      className={animClass}
       style={{
         background: 'var(--surface)',
         border: `2px solid ${isError ? 'var(--node-error)' : borderColor}`,
@@ -30,8 +38,14 @@ export const AgentNode = memo(function AgentNode({ data }: { data: Record<string
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
           {d.name}
         </span>
-        {d.status === 'completed' && <span style={{ color: 'var(--success)', fontSize: 12 }}>&#10003;</span>}
-        {d.status === 'error' && <span style={{ color: 'var(--error)', fontSize: 12 }}>&#10007;</span>}
+        {d.status === 'completed' && (
+          <span className="flow-node__checkmark" style={{ color: 'var(--success)', fontSize: 14 }}>
+            &#10003;
+          </span>
+        )}
+        {d.status === 'error' && (
+          <span style={{ color: 'var(--error)', fontSize: 14 }}>&#10007;</span>
+        )}
       </div>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <span

@@ -1,12 +1,14 @@
 import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { ToolCallNodeData } from '../../../stores/types';
+import '../../../styles/flow-animations.css';
 
 export const ToolCallNode = memo(function ToolCallNode({ data }: { data: Record<string, unknown> }) {
   const d = data as unknown as ToolCallNodeData;
 
   return (
     <div
+      className="flow-node"
       style={{
         background: 'var(--surface)',
         border: '2px solid var(--node-tool)',

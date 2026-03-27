@@ -1,12 +1,14 @@
 import { memo } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { ExperienceNodeData } from '../../../stores/types';
+import '../../../styles/flow-animations.css';
 
 export const ExperienceNode = memo(function ExperienceNode({ data }: { data: Record<string, unknown> }) {
   const d = data as unknown as ExperienceNodeData;
 
   return (
     <div
+      className="flow-node"
       style={{
         background: 'var(--surface)',
         border: '2px solid var(--node-experience)',
