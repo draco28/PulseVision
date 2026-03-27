@@ -31,7 +31,7 @@ function AttractorSphere({ attractor }: { attractor: ReturnType<typeof useSpaceS
   });
 
   return (
-    <group position={[attractor.position.x, attractor.position.y, attractor.position.z]}>
+    <group position={[attractor.position.x * 10, attractor.position.y * 10, attractor.position.z * 10]}>
       {/* Glow sphere */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[0.8 + attractor.strength * 0.5, 16, 16]} />

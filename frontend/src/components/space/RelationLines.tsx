@@ -28,8 +28,9 @@ export function RelationLines() {
       const target = projections.get(rel.targetId);
       if (!source || !target) continue;
 
-      positions.push(source.x, source.y, source.z);
-      positions.push(target.x, target.y, target.z);
+      const S = 10;
+      positions.push(source.x * S, source.y * S, source.z * S);
+      positions.push(target.x * S, target.y * S, target.z * S);
 
       const relType = rel.relationType.split(/[\s{(]/)[0];
       color.set(RELATION_COLORS[relType] || '#8B949E');

@@ -13,7 +13,7 @@ export function HoverLabel() {
   if (!exp || !proj) return null;
 
   return (
-    <Html position={[proj.x, proj.y + 1.5, proj.z]} center style={{ pointerEvents: 'none' }}>
+    <Html position={[proj.x * 10, proj.y * 10 + 1, proj.z * 10]} center style={{ pointerEvents: 'none' }}>
       <div
         style={{
           background: 'var(--surface-elevated)',

@@ -24,8 +24,19 @@ export function ExperienceCloud() {
   const tempObject = useMemo(() => new THREE.Object3D(), []);
   const tempColor = useMemo(() => new THREE.Color(), []);
 
-  const experiences = useSpaceStore((s) => s.filteredExperiences());
+  // Use raw experiences + filters to avoid creating new array every render
+  const allExperiences = useSpaceStore((s) => s.experiences);
+  const filters = useSpaceStore((s) => s.filters);
   const projections = useSpaceStore((s) => s.projections);
+
+  const experiences = useMemo(() => {
+    return allExperiences.filter((exp) => {
+      const typeName = exp.experienceType.split(/[\s{(]/)[0];
+      if (!filters.types.has(typeName)) return false;
+      if (exp.importance < filters.minImportance) return false;
+      return true;
+    });
+  }, [allExperiences, filters]);
   const setHoveredId = useSpaceStore((s) => s.setHoveredId);
   const setSelectedId = useSpaceStore((s) => s.setSelectedId);
 
@@ -53,8 +64,10 @@ export function ExperienceCloud() {
       const proj = projections.get(exp.id);
       if (!proj) continue;
 
-      tempObject.position.set(proj.x, proj.y, proj.z);
-      const scale = 0.3 + exp.importance * 0.7;
+      // Scale up PCA coordinates (typically -1 to 1) to fill 3D space
+      const SCALE = 10;
+      tempObject.position.set(proj.x * SCALE, proj.y * SCALE, proj.z * SCALE);
+      const scale = 0.15 + exp.importance * 0.35;
       tempObject.scale.setScalar(scale);
       tempObject.updateMatrix();
       mesh.setMatrixAt(idx, tempObject.matrix);
